@@ -1,0 +1,2 @@
+# DomoticzMagicHomePlugin
+DomoticzMagicHomePlugin
