@@ -15,9 +15,6 @@ class DomoticzLedBulb:
         except Exception as e:
             Domoticz.Log("Unable to connect to bulb at [{}]: {}".format(ipaddr,e))
             self.connectionFailed=True
-                
-       
-        
             
 
     def getDeviceId(self):

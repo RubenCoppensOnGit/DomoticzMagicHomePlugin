@@ -83,8 +83,6 @@ class BasePlugin:
         else:
             Domoticz.Log("No led strips found on the network")    
 
-
-       
         #self.SyncDevices(1)
         Domoticz.Heartbeat(30)
 
