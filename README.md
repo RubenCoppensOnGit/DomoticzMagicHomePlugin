@@ -1,8 +1,8 @@
 # DomoticzMagicHomePlugin
 initial version : V1 (reused FluxLed library)
 find ALL magic-home devices on the network
-all magic home devices are added in Domoticz and for each of them 5 switches are created
-on of switch, color switch, mode switch, speed switch, brightness switch
+all magic home devices are added in Domoticz and for each of them 3 switches are created
+color switch (incl on/of + brightness), mode switch, speed switch
 only the on of switch is functional. The rest requires implementation.
 
 in future : the switches need to become sub devices.. Images need to be adopted

@@ -28,16 +28,14 @@ class BasePlugin:
    
     
     UNITS = {
-    'Led' : 1,
-    'Color' : 2, 
-    'Brightness' : 3, 
-    'Speed' : 4, 
-    'Scene' : 5
+    'Color' : 1, 
+    'Speed' : 2, 
+    'Scene' : 3
     }
-    
-    
+
     def __init__(self):
         self.bulps  = []
+        self.hartbeats=0
         return
 
     def onStart(self):
@@ -61,27 +59,21 @@ class BasePlugin:
             Domoticz.Log("bulb found with ip adress : " + bulb['ipaddr'])
             # TODO improve device id : now only based on index, and not on the device itself
             tempBulp = MagicHome.DomoticzLedBulb(bulb['ipaddr'],bulb['id'] , bulbNr * 100 ,  bulb['model'])
+            tempBulp.wifiLedBulp.rgbwcapable = True
             self.bulps.append(tempBulp)
         
             #update this code later :  use a named list, and use the switchtype in that list
-           
-            if tempBulp.deviceId + self.UNITS['Led'] not in Devices:
-                Domoticz.Device(Name='led ' + str(bulbNr)  , Unit=self.createUniqueUnitId(bulbNr, self.UNITS['Led']), TypeName="Switch", Image=0, Used=1).Create()
-               
-
-            if tempBulp.deviceId + self.UNITS['Color'] not in Devices:
-                Domoticz.Device(Name= 'led ' + str(bulbNr)  + ' color', Unit=self.createUniqueUnitId(bulbNr, self.UNITS['Color']), TypeName="Switch", Image=0, Used=1).Create()
-                
-        
-            if tempBulp.deviceId + self.UNITS['Brightness'] not in Devices:
-                Domoticz.Device(Name= 'led '  + str(bulbNr)  +' brigthness ' , Unit=self.createUniqueUnitId(bulbNr, self.UNITS['Brightness']), TypeName="Switch", Image=0, Used=1).Create()
-                
+                          
+            #TODO set color switch subtype according to supported led type
+            if tempBulp.deviceId + self.UNITS['Color'] not in Devices: #241 type  = color switch ; subtype 7 = rgbwwz
+                Domoticz.Device(Name= 'led ' + str(bulbNr)  + ' color', Unit=self.createUniqueUnitId(bulbNr, self.UNITS['Color']), TypeName="Color Switch ", Type=241, Subtype = 7,Switchtype = 7,  Image=0, Used=1).Create()
+       
             if tempBulp.deviceId + self.UNITS['Speed'] not in Devices:
-                Domoticz.Device(Name= 'led ' + str(bulbNr) + ' speed', Unit=self.createUniqueUnitId(bulbNr, self.UNITS['Speed']), TypeName="Switch", Image=0, Used=1).Create()
+                Domoticz.Device(Name= 'led ' + str(bulbNr) + ' speed', Unit=self.createUniqueUnitId(bulbNr, self.UNITS['Speed']), TypeName="Dimmer", Image=0, Used=1).Create()
             
 
             if tempBulp.deviceId + self.UNITS['Scene'] not in Devices:
-                Domoticz.Device(Name= 'led scene ' + str(bulbNr) + ' Scene' , Unit=self.createUniqueUnitId(bulbNr, self.UNITS['Scene']), TypeName="Switch", Image=0, Used=1).Create()
+                Domoticz.Device(Name= 'led scene ' + str(bulbNr) + ' Scene' , Unit=self.createUniqueUnitId(bulbNr, self.UNITS['Scene']), TypeName="Input", Image=0, Used=1).Create()
                 
 
         #self.SyncDevices(1)
@@ -114,11 +106,20 @@ class BasePlugin:
         Domoticz.Log("onMessage called")
 
     def onCommand(self, Unit, Command, Level, Hue):
-        Domoticz.Log("onCommand : onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
+        Domoticz.Log("onCommand : onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level) +  " Hue : " + str(Hue))
         #find the bulp representing the unit
+        #paramters / type of action
+        #'On', Level: 100 Hue :
+        #'Off', Level: 100 Hue 
+        #set brightness : 'Set Level', Level: 61 Hue :
+        #led Mode 3 : 'Set Color', Level: 100 Hue : {"b":77,"cw":0,"g":150,"m":3,"r":255,"t":0,"ww":0}
+        #led Mode 2 : Set Color', Level: 100 Hue : {"b":0,"cw":48,"g":0,"m":2,"r":0,"t":207,"ww":207}
+        #led Mode 4 : 'Set Color', Level: 100 Hue : {"b":153,"cw":127,"g":153,"m":4,"r":153,"t":128,"ww":128}
+        # with level value and color in one command : 
+        #'Set Color', Level: 78 Hue : {"b":0,"cw":134,"g":0,"m":2,"r":0,"t":121,"ww":121}
+
         bulbindex = self.getBulpIndexForUnitId(Unit)
         Domoticz.Log("bulb index calculated to : " + str(bulbindex))
-        selectedBulb = self.bulps[bulbindex]
         if self.bulps[bulbindex] :
             selectedBulb = self.bulps[bulbindex]
             Domoticz.Log ("onCommand : Bulb found on calculated index")
@@ -126,28 +127,64 @@ class BasePlugin:
             
             # interprete command and send command to led strip now.
             unitsIndex = self.getUnitsDictKeyForUnitId(Unit)
-            if self.UNITS['Led'] == unitsIndex :
-                Domoticz.Log ("onCommand : received command for unittype  :  power switch")
+            #Power logic
+            if self.UNITS['Color'] == unitsIndex :
+                Domoticz.Log ("onCommand : received command for unittype  :  color light")
                 if Command=='Off':
                     selectedBulb.wifiLedBulp.turnOff()
-                    Domoticz.Log ("onCommand : turning off device " +  Unit)
+                    Domoticz.Log ("onCommand : turning off device " +  str("Unit"))
                     self.UpdateDomoticzDevice(Unit,0, "Off" )
-                else :
+                elif Command == 'On' :
                     selectedBulb.wifiLedBulp.turnOn()
-                     Domoticz.Log ("onCommand : turning on device " +  Unit)
+                    Domoticz.Log ("onCommand : turning on device " +  str("Unit"))
                     self.UpdateDomoticzDevice(Unit,0, "On" )
+                elif Command == 'Set Level' :
+                    #This still contains a bug.. need a fix!
+                    rgbww = None
+                    #(red, green, blue, white, white2)
+                    rgbww = selectedBulb.wifiLedBulp.getRgbww()  
+                    # self, r=None, g=None, b=None, w=None, persist=True,
+                    # brightness=None,9 retry=2, w2=None):
+                    bright = (Level * 255 )/ 100 #from % to a value on a scale of 255/
+                    Domoticz.Log ("onCommand : setting brightness to " + str(int(bright)) + " For device " +  str(Unit) + " rgb :" + str(rgbww[0]) + " : " +str(rgbww[1]) + " : " + str(rgbww[2]) + " : " + str(rgbww[3]))
+                    selectedBulb.wifiLedBulp.setRgbw(rgbww[0],rgbww[1],rgbww[2], True, int(bright) , 2, rgbww[3])     
+                elif Command == 'Set Color' :
+                    # brightness=None, retry=2, w2=None):
+                    bright = (Level * 255 )/ 100 #from % to a value on a scale of 255
+                    #translate mode from Domoticz to FluxLed
+                    #Level: 78 Hue : {"b":0,"cw":134,"g":0,"m":2,"r":0,"t":121,"ww":121}
+                    if Hue[3] == 2 :
+                        Domoticz.Log("onCommand - WW mode")
+                        #level, persist=True, retry=2):
+                        selectedBulb.wifiLedBulp.setWarmWhite(int(Hue[6]))
+                        selectedBulb.wifiLedBulp.setColdWhite(int(Hue[1]))
+                    #read out hue values
 
-                
+                    #call fluxled with values
 
-            elif self.UNITS['Color'] == unitsIndex : 
-                Domoticz.Log ("onCommand : received command for unittype  : color switch")
-            elif self.UNITS['Brightness'] == unitsIndex : 
-                Domoticz.Log ("onCommand : received command for unittype  : Brightness switch")    
+                    #maybe : update Domoticz device with new values
+                    elif Hue[3] == 3:
+                        Domoticz.Log("onCommand - RGB mode")
+                        # 'Set Color', Level: 100 Hue : {"b":77,"cw":0,"g":150,"m":3,"r":255,"t":0,"ww":0}
+                        #(r,g,b, persist=True, brightness=None, retry=2):
+                        selectedBulb.wifiLedBulp.setRgb(r = Hue[4],g = Hue[2],b = Hue[0],brightness=None)
+                    elif Hue[3] == 4:
+                        Domoticz.Log("onCommand - RGBWW mode")
+                        #r=None, g=None, b=None, w=None, persist=True,brightness=None, retry=2, w2=None):
+                        selectedBulb.wifiLedBulp.setRgbw(r = Hue[4],g = Hue[2],b = Hue[0],w=Hue[1] ,brightness=None, w2=Hue[6])
+
+                else :
+                    Domoticz.Log("onCommand : command not implemented yet ")
+                        
+                       
+            #Color Switch logic
+            
             elif self.UNITS['Speed'] == unitsIndex : 
                 Domoticz.Log ("onCommand : received command for unittype  : Speed switch")    
             elif self.UNITS['Scene'] == unitsIndex : 
-                Domoticz.Log ("onCommand : received command for unittype  : Scene switch")    
+                Domoticz.Log ("onCommand : received command for unittype  : Scene switch")   
 
+            selectedBulb.wifiLedBulp.update_state() 
         else :
             Domoticz.Log("onCommand : ERR : Could not find bulb on wich command was issued")
 
@@ -158,11 +195,16 @@ class BasePlugin:
 
     def onDisconnect(self, Connection):
         Domoticz.Log("onDisconnect called")
+        for bulb in self.bulps:
+            bulb.wifiLedBulp.close()
 
     def onHeartbeat(self):
         Domoticz.Log("onHeartbeat called")
+        self.hartbeats +=1
         if (len(self.bulps) > 0):
             self.updateAllDomoticzDeviceInfo()
+            
+            
 
     def DumpInfoInLog(self, bulp):
         connectionInfo =bulp.connectionFailed
@@ -191,12 +233,46 @@ class BasePlugin:
             if bulb.connectionFailed != True:
                 Domoticz.Log("updateDomoticzDeviceInfo - led power device found")
                 # method signature : Devices[Unit].Update(nValue=nValue, sValue=str(sValue), TimedOut=TimedOut)
+                if self.hartbeats >=3 : #update led state after 3 hartbeats ; TODO make this configurable
+                    bulb.wifiLedBulp.update_state
+                    self.hartbeats = 0 # reset
+                #Update power
                 if (bulb.wifiLedBulp.is_on):
-                    self.UpdateDomoticzDevice(bulb.deviceId + self.UNITS['Led'] , 1, "On")
+                    self.UpdateDomoticzDevice(bulb.deviceId + self.UNITS['Color'] , 1, "On")
                     Domoticz.Log("updateDomoticzDeviceInfo - led power set to ON")
+                    #update color   
+                    # self.mode = "ww"
+                    #self.warmth_level = utils.percentToByte(level)
+                    #self.pattern_code = 0x61
+                    #self.red = 0
+                    #self.green = 0
+                    #self.blue = 0
+                    #self.turn_on = True
+
+                    #ColorMode {
+                    #ColorModeNone = 0,   // Illegal
+                    #ColorModeWhite = 1,  // White. Valid fields: none
+                    #ColorModeTemp = 2,   // White with color temperature. Valid fields: t
+                    #ColorModeRGB = 3,    // Color. Valid fields: r, g, b.
+                    #ColorModeCustom = 4, // Custom (color + white). Valid fields: r, g, b, cw, ww, depending on device capabilities
+                    #ColorModeLast = ColorModeCustom,
+            
+        
+                    clor = None 
+                    rgb  = bulb.wifiLedBulp.getRgbww()
+                    clor = self.createColorJsonObj (bulb.m,bulb.wifiLedBulp.getWarmWhite255,rgb[0],rgb[1],rgb[2],rgb[3],rgb[4])
+
+                    if( clor != None):
+                        Domoticz.Log("updateAllDomoticzDeviceInfo - incoming led brightness :" + str(bulb.wifiLedBulp.brightness))
+                        brightnessInPercent = (bulb.wifiLedBulp.brightness /255) * 100
+                        Domoticz.Log("updateAllDomoticzDeviceInfo - Bightness level : " + str(int(brightnessInPercent ))+ "%")
+                        Devices[bulb.deviceId + self.UNITS['Color']].Update(nValue=1, sValue=str(int(brightnessInPercent)),Color = clor )
+                    else:
+                        Domoticz.Log("updateAllDomoticzDeviceInfo - ERR unimplemented color mode")
+
                 else:   
                     #Devices[bulb.deviceId + self.UNITS['Led'] ].Update(0,"Off",5)
-                    self.UpdateDomoticzDevice(bulb.deviceId + self.UNITS['Led'] , 0, "Off")
+                    self.UpdateDomoticzDevice(bulb.deviceId + self.UNITS['Color'] , 0, "Off")
                     Domoticz.Log("updateDomoticzDeviceInfo - led power set to Off")
             else:
                 Domoticz.log("updateDomoticzDeviceInfo -  ERR : it seems that the connection to the device is lost")
@@ -206,6 +282,77 @@ class BasePlugin:
             Devices[unitId].Update(nValue,sValue,5)
         else :
             Domoticz.Log("updateDomoticzDeviceInfo - ERR : device with unit id" + unitId + "not found in device list")
+
+    def createColorJsonObj(self,m, t, r,g,b,cw,ww ):
+       
+
+        if m == "ColorModeWhite" :
+          return """ColorMode { \ 
+           	ColorModeNone = 0,   // Illegal
+           	ColorModeWhite = 1,  // White. Valid fields: none
+           	ColorModeTemp = 2,   // White with color temperature. Valid fields: t
+           	ColorModeRGB = 3,    // Color. Valid fields: r, g, b.
+           	ColorModeCustom = 4, // Custom (color + white). Valid fields: r, g, b, cw, ww, depending on device capabilities
+           	ColorModeLast = ColorModeCustom,
+           };
+           
+           Color {
+           	ColorMode""" + str(1) + """;
+            }"""
+
+        if m == "ColorModeTemp" :
+          return """ColorMode { \ 
+           	ColorModeNone = 0,   // Illegal
+           	ColorModeWhite = 1,  // White. Valid fields: none
+           	ColorModeTemp = 2,   // White with color temperature. Valid fields: t
+           	ColorModeRGB = 3,    // Color. Valid fields: r, g, b.
+           	ColorModeCustom = 4, // Custom (color + white). Valid fields: r, g, b, cw, ww, depending on device capabilities
+           	ColorModeLast = ColorModeCustom,
+           };
+           
+           Color {
+           	ColorMode""" + str(2) + """;
+           	uint8_t """ + str(t) + """;     // Range:0..255, Color temperature (warm / cold ratio, 0 is coldest, 255 is warmest)
+           }"""
+
+        if m == "ColorModeRGB" :
+          return """ColorMode { \ 
+           	ColorModeNone = 0,   // Illegal
+           	ColorModeWhite = 1,  // White. Valid fields: none
+           	ColorModeTemp = 2,   // White with color temperature. Valid fields: t
+           	ColorModeRGB = 3,    // Color. Valid fields: r, g, b.
+           	ColorModeCustom = 4, // Custom (color + white). Valid fields: r, g, b, cw, ww, depending on device capabilities
+           	ColorModeLast = ColorModeCustom,
+           };
+           
+           Color {
+           	ColorMode""" + str(3) + """;
+           	uint8_t """ + str(r) + """;     // Range:0..255, Red level
+           	uint8_t """ + str(g) + """;     // Range:0..255, Green level
+           	uint8_t """ + str(b) + """;     // Range:0..255, Blue level
+           }"""
+
+        if m == "ColorModeCustom" :
+          return """ColorMode { \ 
+           	ColorModeNone = 0,   // Illegal
+           	ColorModeWhite = 1,  // White. Valid fields: none
+           	ColorModeTemp = 2,   // White with color temperature. Valid fields: t
+           	ColorModeRGB = 3,    // Color. Valid fields: r, g, b.
+           	ColorModeCustom = 4, // Custom (color + white). Valid fields: r, g, b, cw, ww, depending on device capabilities
+           	ColorModeLast = ColorModeCustom,
+           };
+           
+           Color {
+           	ColorMode""" + str(4) + """;
+           	uint8_t """ + str(t) + """;     // Range:0..255, Color temperature (warm / cold ratio, 0 is coldest, 255 is warmest)
+           	uint8_t """ + str(r) + """;     // Range:0..255, Red level
+           	uint8_t """ + str(g) + """;     // Range:0..255, Green level
+           	uint8_t """ + str(b) + """;     // Range:0..255, Blue level
+           	uint8_t """ + str(cw) + """;    // Range:0..255, Cold white level
+           	uint8_t """ + str(ww) + """;    // Range:0..255, Warm white level (also used as level for monochrome white)
+           }"""
+
+        
 
 
             
